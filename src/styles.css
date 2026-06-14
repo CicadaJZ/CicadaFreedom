@@ -120,7 +120,11 @@ h1 {
 .composer button,
 .daily-card button,
 .post-card footer button,
-.login-card button {
+.login-card button,
+.editor-toggle,
+.save-profile,
+.avatar-picker button,
+.upload-control {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -277,6 +281,32 @@ button:hover {
   border: 1px solid var(--ink);
   border-radius: 6px;
   background: #9ee6b6;
+  overflow: hidden;
+  font-size: 28px;
+  font-weight: 900;
+}
+
+.avatar img,
+.upload-preview img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.image-avatar {
+  background: #fffdf6;
+}
+
+.profile-mode {
+  display: block;
+  max-width: 170px;
+  margin-top: 7px;
+  color: var(--muted);
+  overflow: hidden;
+  font-size: 12px;
+  font-weight: 800;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .level-pill,
@@ -318,10 +348,53 @@ button:hover {
 
 .progress-block,
 .login-card,
+.countdown-card,
+.profile-editor,
 .level-list,
 .daily-card,
 .badge-wall {
   margin-top: 16px;
+}
+
+.countdown-card {
+  border: 1px solid var(--ink);
+  border-radius: 6px;
+  padding: 14px;
+  background: #fff4c7;
+}
+
+.countdown-card label,
+.profile-editor label,
+.field-label {
+  display: block;
+  margin: 12px 0 8px;
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.countdown-card input,
+.profile-editor input[type="text"],
+.profile-editor input:not([type]) {
+  width: 100%;
+  min-height: 40px;
+  border: 1px solid var(--ink);
+  border-radius: 6px;
+  padding: 0 10px;
+  background: #fffdf6;
+}
+
+.countdown-card strong {
+  display: block;
+  margin-top: 12px;
+  font-size: 28px;
+  line-height: 1;
+}
+
+.countdown-card p {
+  margin: 10px 0 0;
+  color: #4a3a1e;
+  font-size: 13px;
+  line-height: 1.6;
 }
 
 .progress-label {
@@ -365,6 +438,92 @@ button:hover {
 .login-card button {
   flex: 0 0 42px;
   box-shadow: none;
+}
+
+.login-card small {
+  display: block;
+  margin-top: 8px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.profile-editor {
+  border: 1px solid var(--ink);
+  border-radius: 6px;
+  padding: 12px;
+  background: #edf0f3;
+}
+
+.editor-toggle,
+.save-profile {
+  width: 100%;
+  min-height: 38px;
+  box-shadow: none;
+  font-weight: 900;
+}
+
+.editor-body {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+
+.avatar-picker {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+}
+
+.avatar-picker button {
+  min-height: 40px;
+  padding: 0;
+  background: #fffdf6;
+  box-shadow: none;
+  font-size: 20px;
+}
+
+.avatar-picker button.selected {
+  background: #9ee6b6;
+  box-shadow: inset 0 0 0 2px #1d232a;
+}
+
+.upload-control {
+  position: relative;
+  width: 100%;
+  min-height: 38px;
+  margin-top: 12px;
+  background: #fffdf6;
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.upload-control input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+}
+
+.upload-preview {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-top: 10px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.upload-preview img {
+  width: 34px;
+  height: 34px;
+  border: 1px solid var(--ink);
+  border-radius: 6px;
+}
+
+.save-profile {
+  margin-top: 12px;
+  background: #9ee6b6;
 }
 
 .level-list {

@@ -12,17 +12,20 @@ import {
   LogIn,
   MessageCircle,
   Moon,
+  Pencil,
   Plus,
+  Save,
   Send,
   ShieldCheck,
   Sparkles,
   Star,
   ThumbsUp,
   Trophy,
+  Upload,
   UserRound,
   Zap,
 } from "lucide-react";
-import { FormEvent, useMemo, useState } from "react";
+import { ChangeEvent, FormEvent, useEffect, useMemo, useState } from "react";
 
 type Channel = "all" | "work" | "school" | "meme" | "quote" | "joke";
 
@@ -46,6 +49,14 @@ type Level = {
   tone: string;
 };
 
+type UserProfile = {
+  email: string;
+  nickname: string;
+  avatar: string;
+  avatarType: "preset" | "upload";
+  isGuest: boolean;
+};
+
 const levels: Level[] = [
   { min: 0, title: "实习牛马", icon: Coffee, tone: "ash" },
   { min: 80, title: "初级撞钟师", icon: BellRing, tone: "mint" },
@@ -53,6 +64,26 @@ const levels: Level[] = [
   { min: 320, title: "工位幽灵", icon: Sparkles, tone: "pink" },
   { min: 520, title: "带薪发疯大师", icon: Flame, tone: "orange" },
   { min: 760, title: "自由灵魂认证", icon: Trophy, tone: "gold" },
+];
+
+const presetAvatars = ["☕", "💼", "🫠", "🧃", "🌙", "🔥", "🦾", "✨"];
+
+const randomNames = [
+  "带薪呼吸员",
+  "准点撤退侠",
+  "工位漂流瓶",
+  "下课回血包",
+  "人间续航机",
+  "摸鱼观察员",
+  "会议隐身术士",
+  "周五预备役",
+];
+
+const doneLines = [
+  "还有呼吸，续命成功，明日再战。",
+  "今日工位副本已通关，请立刻把灵魂捡回来。",
+  "恭喜活到下班，下一个任务：假装没看见工作群。",
+  "下课/下班铃已响，今天的你值得一口热饭。",
 ];
 
 const initialPosts: Post[] = [
@@ -145,15 +176,67 @@ function getLevel(points: number) {
   return [...levels].reverse().find((level) => points >= level.min) ?? levels[0];
 }
 
+function getRandomProfile(email: string): UserProfile {
+  return {
+    email,
+    nickname: randomNames[Math.floor(Math.random() * randomNames.length)],
+    avatar: presetAvatars[Math.floor(Math.random() * presetAvatars.length)],
+    avatarType: "preset",
+    isGuest: false,
+  };
+}
+
+function getCountdown(targetTime: string, now: Date) {
+  const [hours, minutes] = targetTime.split(":").map(Number);
+  const target = new Date(now);
+  target.setHours(hours || 18, minutes || 0, 0, 0);
+  const diff = target.getTime() - now.getTime();
+
+  if (diff <= 0) {
+    return {
+      isDone: true,
+      label: "00:00:00",
+      doneText: doneLines[now.getDate() % doneLines.length],
+    };
+  }
+
+  const totalSeconds = Math.floor(diff / 1000);
+  const h = String(Math.floor(totalSeconds / 3600)).padStart(2, "0");
+  const m = String(Math.floor((totalSeconds % 3600) / 60)).padStart(2, "0");
+  const s = String(totalSeconds % 60).padStart(2, "0");
+  return {
+    isDone: false,
+    label: `${h}:${m}:${s}`,
+    doneText: "",
+  };
+}
+
 function App() {
   const [activeChannel, setActiveChannel] = useState<Channel>("all");
   const [posts, setPosts] = useState(initialPosts);
   const [points, setPoints] = useState(236);
-  const [viewer, setViewer] = useState("游客 404");
+  const [user, setUser] = useState<UserProfile>({
+    email: "",
+    nickname: "游客 404",
+    avatar: "☕",
+    avatarType: "preset",
+    isGuest: true,
+  });
   const [email, setEmail] = useState("");
+  const [draftNickname, setDraftNickname] = useState("");
+  const [draftAvatar, setDraftAvatar] = useState(presetAvatars[0]);
+  const [draftAvatarType, setDraftAvatarType] = useState<"preset" | "upload">("preset");
+  const [isEditingProfile, setIsEditingProfile] = useState(false);
+  const [targetTime, setTargetTime] = useState("18:00");
+  const [now, setNow] = useState(() => new Date());
   const [composer, setComposer] = useState("");
   const [selectedMood, setSelectedMood] = useState("合法摸鱼");
   const [asMeme, setAsMeme] = useState(false);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(new Date()), 1000);
+    return () => window.clearInterval(timer);
+  }, []);
 
   const level = getLevel(points);
   const nextLevel = levels.find((item) => item.min > points);
@@ -168,18 +251,63 @@ function App() {
 
   const todayQuote = dailyQuotes[new Date().getDate() % dailyQuotes.length];
   const todayJoke = jokes[new Date().getDay() % jokes.length];
+  const countdown = getCountdown(targetTime, now);
+  const viewer = user.nickname;
 
   function handleLogin(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const name = email.split("@")[0]?.trim() || "邮箱牛马";
-    setViewer(name);
+    const profile = getRandomProfile(email);
+    setUser(profile);
+    setDraftNickname(profile.nickname);
+    setDraftAvatar(profile.avatar);
+    setDraftAvatarType(profile.avatarType);
+    setIsEditingProfile(true);
     setEmail("");
     setPoints((current) => current + 18);
   }
 
   function handleGuest() {
-    setViewer(`游客 ${Math.floor(Math.random() * 900 + 100)}`);
+    const guest: UserProfile = {
+      email: "",
+      nickname: `游客 ${Math.floor(Math.random() * 900 + 100)}`,
+      avatar: presetAvatars[Math.floor(Math.random() * presetAvatars.length)],
+      avatarType: "preset",
+      isGuest: true,
+    };
+    setUser(guest);
     setPoints((current) => current + 3);
+  }
+
+  function startProfileEdit() {
+    setDraftNickname(user.nickname);
+    setDraftAvatar(user.avatar);
+    setDraftAvatarType(user.avatarType);
+    setIsEditingProfile(true);
+  }
+
+  function saveProfile() {
+    setUser((current) => ({
+      ...current,
+      nickname: draftNickname.trim() || current.nickname,
+      avatar: draftAvatar,
+      avatarType: draftAvatarType,
+    }));
+    setIsEditingProfile(false);
+    setPoints((current) => current + 5);
+  }
+
+  function handleAvatarUpload(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (typeof reader.result === "string") {
+        setDraftAvatar(reader.result);
+        setDraftAvatarType("upload");
+      }
+    };
+    reader.readAsDataURL(file);
   }
 
   function handlePost(event: FormEvent<HTMLFormElement>) {
@@ -250,8 +378,10 @@ function App() {
             </div>
             <div className="screen-line wide" />
             <div className="screen-line" />
-            <div className="screen-sticker">距离下班还有 06:18:22</div>
-            <div className="screen-badge">带薪呼吸中</div>
+            <div className="screen-sticker">
+              {countdown.isDone ? countdown.doneText : `距离解放还有 ${countdown.label}`}
+            </div>
+            <div className="screen-badge">{countdown.isDone ? "灵魂已下线" : "带薪呼吸中"}</div>
           </div>
         </div>
       </section>
@@ -259,8 +389,8 @@ function App() {
       <section className="workspace">
         <aside className="side-panel profile-panel">
           <div className="profile-top">
-            <div className="avatar">
-              <LevelIcon size={28} />
+            <div className={`avatar ${user.avatarType === "upload" ? "image-avatar" : ""}`}>
+              {user.avatarType === "upload" ? <img src={user.avatar} alt="" /> : <span>{user.avatar}</span>}
             </div>
             <div>
               <h2>{viewer}</h2>
@@ -268,7 +398,24 @@ function App() {
                 <LevelIcon size={14} />
                 {level.title}
               </span>
+              <small className="profile-mode">{user.isGuest ? "游客模式" : user.email}</small>
             </div>
+          </div>
+
+          <div className="countdown-card">
+            <div className="card-title">
+              <AlarmClock size={18} />
+              下班/下课时间
+            </div>
+            <label htmlFor="targetTime">今天几点解放</label>
+            <input
+              id="targetTime"
+              type="time"
+              value={targetTime}
+              onChange={(event) => setTargetTime(event.target.value)}
+            />
+            <strong>{countdown.isDone ? "今日已通关" : countdown.label}</strong>
+            <p>{countdown.isDone ? countdown.doneText : "每秒都在变短，虽然今天本人也在变短。"}</p>
           </div>
 
           <div className="progress-block">
@@ -295,7 +442,62 @@ function App() {
                 <LogIn size={18} />
               </button>
             </div>
+            {!user.isGuest && <small>已登录后可编辑昵称和头像。</small>}
           </form>
+
+          <section className="profile-editor">
+            <button className="editor-toggle" type="button" onClick={startProfileEdit}>
+              <Pencil size={16} />
+              编辑资料
+            </button>
+
+            {isEditingProfile && (
+              <div className="editor-body">
+                <label htmlFor="nickname">昵称</label>
+                <input
+                  id="nickname"
+                  value={draftNickname}
+                  onChange={(event) => setDraftNickname(event.target.value)}
+                  placeholder="给今天的自己起个名"
+                />
+
+                <span className="field-label">头像</span>
+                <div className="avatar-picker">
+                  {presetAvatars.map((avatar) => (
+                    <button
+                      className={draftAvatar === avatar && draftAvatarType === "preset" ? "selected" : ""}
+                      key={avatar}
+                      type="button"
+                      onClick={() => {
+                        setDraftAvatar(avatar);
+                        setDraftAvatarType("preset");
+                      }}
+                    >
+                      {avatar}
+                    </button>
+                  ))}
+                </div>
+
+                <label className="upload-control">
+                  <Upload size={16} />
+                  本地上传头像
+                  <input accept="image/*" type="file" onChange={handleAvatarUpload} />
+                </label>
+
+                {draftAvatarType === "upload" && (
+                  <div className="upload-preview">
+                    <img src={draftAvatar} alt="" />
+                    <span>头像已载入</span>
+                  </div>
+                )}
+
+                <button className="save-profile" type="button" onClick={saveProfile}>
+                  <Save size={16} />
+                  保存资料
+                </button>
+              </div>
+            )}
+          </section>
 
           <div className="level-list">
             {levels.map((item) => {
