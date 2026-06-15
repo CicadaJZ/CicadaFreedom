@@ -165,6 +165,8 @@ function App() {
   const [isEditingProfile, setIsEditingProfile] = useState(false);
   const [adminStats, setAdminStats] = useState<AdminStats | null>(null);
   const [adminPosts, setAdminPosts] = useState<Post[]>([]);
+  const [adminUsers, setAdminUsers] = useState<UserProfile[]>([]);
+  const [adminView, setAdminView] = useState<"posts" | "users">("posts");
   const [apiError, setApiError] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [targetTime, setTargetTime] = useState("18:00");
@@ -208,6 +210,7 @@ function App() {
       const result = await fetchAdminDashboard();
       setAdminStats(result.stats);
       setAdminPosts(result.posts);
+      setAdminUsers(result.users);
       setApiError("");
     } catch (error) {
       setApiError(error instanceof Error ? error.message : "后台数据加载失败");
@@ -818,16 +821,24 @@ function App() {
           </div>
 
           <div className="metric-grid">
-            <div className="metric-card">
+            <button
+              className={`metric-card metric-button ${adminView === "users" ? "active" : ""}`}
+              onClick={() => setAdminView("users")}
+              type="button"
+            >
               <Users size={18} />
               <span>注册用户</span>
               <strong>{adminStats?.users ?? 0}</strong>
-            </div>
-            <div className="metric-card">
+            </button>
+            <button
+              className={`metric-card metric-button ${adminView === "posts" ? "active" : ""}`}
+              onClick={() => setAdminView("posts")}
+              type="button"
+            >
               <MessageCircle size={18} />
               <span>全部帖子</span>
               <strong>{adminStats?.posts ?? 0}</strong>
-            </div>
+            </button>
             <div className="metric-card">
               <Eye size={18} />
               <span>展示中</span>
@@ -842,32 +853,62 @@ function App() {
 
           <div className="admin-layout">
             <section className="admin-table">
-              <header>
-                <div>
-                  <h3>帖子审核</h3>
-                  <p>隐藏不会删除内容，删除会从本地 JSON 数据中移除。</p>
-                </div>
-              </header>
-              {adminPosts.map((post) => (
-                <article className="admin-row" key={post.id}>
-                  <div>
-                    <strong>{post.author}</strong>
-                    <span>{post.channel} · {post.mood} · {post.time}</span>
-                    <p>{post.content}</p>
-                  </div>
-                  <span className={`status-pill ${post.status}`}>{post.status === "published" ? "展示中" : "已隐藏"}</span>
-                  <div className="admin-actions">
-                    <button onClick={() => void handlePostStatus(post.id, post.status === "published" ? "hidden" : "published")}>
-                      {post.status === "published" ? <EyeOff size={16} /> : <Eye size={16} />}
-                      {post.status === "published" ? "隐藏" : "恢复"}
-                    </button>
-                    <button className="danger-action" onClick={() => void handleDeletePost(post.id)}>
-                      <Trash2 size={16} />
-                      删除
-                    </button>
-                  </div>
-                </article>
-              ))}
+              {adminView === "posts" ? (
+                <>
+                  <header>
+                    <div>
+                      <h3>帖子审核</h3>
+                      <p>隐藏不会删除内容，删除会从本地 JSON 数据中移除。</p>
+                    </div>
+                  </header>
+                  {adminPosts.map((post) => (
+                    <article className="admin-row" key={post.id}>
+                      <div>
+                        <strong>{post.author}</strong>
+                        <span>{post.channel} · {post.mood} · {post.time}</span>
+                        <p>{post.content}</p>
+                      </div>
+                      <span className={`status-pill ${post.status}`}>{post.status === "published" ? "展示中" : "已隐藏"}</span>
+                      <div className="admin-actions">
+                        <button onClick={() => void handlePostStatus(post.id, post.status === "published" ? "hidden" : "published")}>
+                          {post.status === "published" ? <EyeOff size={16} /> : <Eye size={16} />}
+                          {post.status === "published" ? "隐藏" : "恢复"}
+                        </button>
+                        <button className="danger-action" onClick={() => void handleDeletePost(post.id)}>
+                          <Trash2 size={16} />
+                          删除
+                        </button>
+                      </div>
+                    </article>
+                  ))}
+                </>
+              ) : (
+                <>
+                  <header>
+                    <div>
+                      <h3>注册用户列表</h3>
+                      <p>这里展示已注册账号的昵称、邮箱、等级积分和登录身份。</p>
+                    </div>
+                  </header>
+                  {adminUsers.length === 0 && <div className="empty-state">还没有注册用户。</div>}
+                  {adminUsers.map((adminUser) => (
+                    <article className="admin-row user-row" key={`${adminUser.email}-${adminUser.id ?? "local"}`}>
+                      <div className="user-identity">
+                        <span className="user-avatar">{adminUser.avatar}</span>
+                        <div>
+                          <strong>{adminUser.nickname}</strong>
+                          <span>{adminUser.email || "游客账号"}</span>
+                        </div>
+                      </div>
+                      <span className="status-pill published">{adminUser.isGuest ? "游客" : "已注册"}</span>
+                      <div className="user-meta">
+                        <span>积分</span>
+                        <strong>{adminUser.points}</strong>
+                      </div>
+                    </article>
+                  ))}
+                </>
+              )}
             </section>
 
             <aside className="admin-side">

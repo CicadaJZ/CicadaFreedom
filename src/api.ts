@@ -1,6 +1,9 @@
 import { AdminStats, Post, UserProfile } from "./types";
 
 const apiBase = import.meta.env.VITE_API_BASE ?? "/api";
+const localAuthKey = "cicada-freedom-local-auth-users";
+
+type LocalUserRecord = UserProfile & { password: string };
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   let response: Response;
@@ -12,7 +15,9 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
       },
       ...init,
     });
-  } catch {
+  } catch (error) {
+    const fallback = handleLocalAuthFallback<T>(path, init);
+    if (fallback) return fallback;
     throw new Error("后端服务没有连接上，请先启动 API 服务");
   }
 
@@ -27,6 +32,125 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     throw new Error(payload.message || "接口请求失败");
   }
   return payload;
+}
+
+function handleLocalAuthFallback<T>(path: string, init?: RequestInit): T | null {
+  if (typeof window === "undefined") return null;
+  const method = init?.method ?? "GET";
+  if (method !== "POST") return null;
+
+  if (path === "/auth/logout") {
+    return { ok: true } as T;
+  }
+
+  if (path === "/auth/guest") {
+    return {
+      user: {
+        id: Date.now(),
+        email: "",
+        nickname: `游客 ${Math.floor(Math.random() * 900 + 100)}`,
+        avatar: "☕",
+        avatarType: "preset",
+        isGuest: true,
+        points: 239,
+      },
+    } as T;
+  }
+
+  const payload = readRequestBody(init);
+  if (!payload) return null;
+  const email = String(payload.email || "").trim().toLowerCase();
+  const password = String(payload.password || "");
+  const code = String(payload.code || "").trim();
+
+  if (path === "/auth/register") {
+    if (!isValidEmail(email)) throw new Error("请输入有效邮箱");
+    if (code !== "7777") throw new Error("验证码不正确，当前万能验证码是 7777");
+    if (password.length < 6) throw new Error("密码至少 6 位");
+
+    const users = readLocalUsers();
+    if (users.some((user) => user.email === email)) throw new Error("这个邮箱已经注册过了");
+
+    const user = createLocalUser(email, password);
+    writeLocalUsers([...users, user]);
+    return { user: compactLocalUser(user) } as T;
+  }
+
+  if (path === "/auth/login/password") {
+    const users = readLocalUsers();
+    const user = users.find((item) => item.email === email);
+    if (!user) throw new Error("账号不存在，请先注册");
+    if (user.password !== password) throw new Error("密码不正确");
+    user.points += 8;
+    writeLocalUsers(users);
+    return { user: compactLocalUser(user) } as T;
+  }
+
+  if (path === "/auth/login/code") {
+    if (!isValidEmail(email)) throw new Error("请输入有效邮箱");
+    if (code !== "7777") throw new Error("验证码不正确，当前万能验证码是 7777");
+    const users = readLocalUsers();
+    const user = users.find((item) => item.email === email);
+    if (!user) throw new Error("账号不存在，请先注册");
+    user.points += 8;
+    writeLocalUsers(users);
+    return { user: compactLocalUser(user) } as T;
+  }
+
+  return null;
+}
+
+function readRequestBody(init?: RequestInit) {
+  if (typeof init?.body !== "string") return null;
+  try {
+    return JSON.parse(init.body) as Record<string, unknown>;
+  } catch {
+    return null;
+  }
+}
+
+function readLocalUsers(): LocalUserRecord[] {
+  try {
+    const raw = window.localStorage.getItem(localAuthKey);
+    return raw ? (JSON.parse(raw) as LocalUserRecord[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeLocalUsers(users: LocalUserRecord[]) {
+  window.localStorage.setItem(localAuthKey, JSON.stringify(users));
+}
+
+function createLocalUser(email: string, password: string): LocalUserRecord {
+  const avatars = ["☕", "💼", "🫠", "🧃", "🌙", "🔥", "🦾", "✨"];
+  const names = ["带薪呼吸员", "准点撤退侠", "工位漂流瓶", "下课回血包", "人间续航机", "摸鱼观察员"];
+  return {
+    id: Date.now(),
+    email,
+    password,
+    nickname: names[Math.floor(Math.random() * names.length)],
+    avatar: avatars[Math.floor(Math.random() * avatars.length)],
+    avatarType: "preset",
+    isGuest: false,
+    points: 236,
+  };
+}
+
+function compactLocalUser(user: LocalUserRecord): UserProfile {
+  return {
+    id: user.id,
+    email: user.email,
+    nickname: user.nickname,
+    avatar: user.avatar,
+    avatarType: user.avatarType,
+    isGuest: user.isGuest,
+    points: user.points,
+  };
+}
+
+function isValidEmail(email: string) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 }
 
 export function fetchPosts(status = "published") {
@@ -92,7 +216,49 @@ export function deleteAccount(userId: number) {
 }
 
 export function fetchAdminDashboard() {
-  return request<{ stats: AdminStats; posts: Post[]; users: UserProfile[] }>("/admin/dashboard");
+  return request<{ stats: AdminStats; posts: Post[]; users: UserProfile[] }>("/admin/dashboard")
+    .then(mergeLocalUsersIntoDashboard)
+    .catch((error) => {
+      const localUsers = readLocalUsers().map(compactLocalUser);
+      if (localUsers.length === 0) throw error;
+      return mergeLocalUsersIntoDashboard({
+        stats: createEmptyAdminStats(),
+        posts: [],
+        users: [],
+      });
+    });
+}
+
+function mergeLocalUsersIntoDashboard(dashboard: { stats: AdminStats; posts: Post[]; users: UserProfile[] }) {
+  const localUsers = readLocalUsers().map(compactLocalUser);
+  if (localUsers.length === 0) return dashboard;
+
+  const knownEmails = new Set(dashboard.users.map((user) => user.email));
+  const mergedUsers = [...dashboard.users, ...localUsers.filter((user) => !knownEmails.has(user.email))];
+  return {
+    ...dashboard,
+    stats: {
+      ...dashboard.stats,
+      users: mergedUsers.length,
+    },
+    users: mergedUsers,
+  };
+}
+
+function createEmptyAdminStats(): AdminStats {
+  return {
+    users: 0,
+    posts: 0,
+    published: 0,
+    hidden: 0,
+    totalLikes: 0,
+    memePosts: 0,
+    newestPostAt: null,
+    channels: ["work", "school", "meme", "quote", "joke"].map((channel) => ({
+      channel: channel as Post["channel"],
+      count: 0,
+    })),
+  };
 }
 
 export function updatePostStatus(postId: number, status: Post["status"]) {

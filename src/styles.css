@@ -955,6 +955,18 @@ button:hover {
   padding: 16px;
 }
 
+.metric-button {
+  width: 100%;
+  text-align: left;
+  cursor: pointer;
+}
+
+.metric-button.active {
+  background: #d7ecff;
+  transform: translate(2px, 2px);
+  box-shadow: 2px 2px 0 var(--ink);
+}
+
 .metric-card span {
   color: var(--muted);
   font-size: 13px;
@@ -1030,6 +1042,44 @@ button:hover {
   margin: 8px 0 0;
   color: #29313a;
   line-height: 1.6;
+}
+
+.user-row {
+  grid-template-columns: minmax(0, 1fr) 84px 120px;
+}
+
+.user-identity {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+.user-avatar {
+  display: grid;
+  flex: 0 0 42px;
+  width: 42px;
+  height: 42px;
+  place-items: center;
+  border: 1px solid var(--ink);
+  border-radius: 6px;
+  background: #edf0f3;
+  font-size: 22px;
+}
+
+.user-meta {
+  display: grid;
+  justify-items: end;
+  gap: 2px;
+}
+
+.user-meta span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.user-meta strong {
+  font-size: 24px;
 }
 
 .status-pill {
