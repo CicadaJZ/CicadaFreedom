@@ -8,54 +8,49 @@ import {
   Flame,
   Heart,
   Image,
+  KeyRound,
   Laugh,
   LogIn,
+  LogOut,
+  MailCheck,
   MessageCircle,
   Moon,
   Pencil,
   Plus,
+  RefreshCw,
   Save,
   Send,
   ShieldCheck,
   Sparkles,
   Star,
   ThumbsUp,
+  Trash2,
   Trophy,
   Upload,
+  Users,
+  UserX,
+  Eye,
+  EyeOff,
   UserRound,
   Zap,
 } from "lucide-react";
 import { ChangeEvent, FormEvent, useEffect, useMemo, useState } from "react";
-
-type Channel = "all" | "work" | "school" | "meme" | "quote" | "joke";
-
-type Post = {
-  id: number;
-  author: string;
-  role: string;
-  channel: Exclude<Channel, "all">;
-  content: string;
-  likes: number;
-  comments: number;
-  mood: string;
-  time: string;
-  isMeme?: boolean;
-};
-
-type Level = {
-  min: number;
-  title: string;
-  icon: typeof Coffee;
-  tone: string;
-};
-
-type UserProfile = {
-  email: string;
-  nickname: string;
-  avatar: string;
-  avatarType: "preset" | "upload";
-  isGuest: boolean;
-};
+import {
+  createPost,
+  deleteAccount,
+  deletePost,
+  enterGuest,
+  fetchAdminDashboard,
+  fetchPosts,
+  likePost,
+  loginWithCode,
+  loginWithPassword,
+  logout,
+  register,
+  updatePostStatus,
+  updateProfile,
+} from "./api";
+import { AdminStats, Channel, Level, Post, UserProfile } from "./types";
 
 const levels: Level[] = [
   { min: 0, title: "实习牛马", icon: Coffee, tone: "ash" },
@@ -68,85 +63,11 @@ const levels: Level[] = [
 
 const presetAvatars = ["☕", "💼", "🫠", "🧃", "🌙", "🔥", "🦾", "✨"];
 
-const randomNames = [
-  "带薪呼吸员",
-  "准点撤退侠",
-  "工位漂流瓶",
-  "下课回血包",
-  "人间续航机",
-  "摸鱼观察员",
-  "会议隐身术士",
-  "周五预备役",
-];
-
 const doneLines = [
   "还有呼吸，续命成功，明日再战。",
   "今日工位副本已通关，请立刻把灵魂捡回来。",
   "恭喜活到下班，下一个任务：假装没看见工作群。",
   "下课/下班铃已响，今天的你值得一口热饭。",
-];
-
-const initialPosts: Post[] = [
-  {
-    id: 1,
-    author: "工位续命员",
-    role: "摸鱼熟练工",
-    channel: "work",
-    content:
-      "今天最大的成就：在老板路过前 0.5 秒切回了表格。人生没有白走的路，只有白做的 PPT。",
-    likes: 248,
-    comments: 32,
-    mood: "带薪惊险",
-    time: "09:41",
-  },
-  {
-    id: 2,
-    author: "期末幸存者",
-    role: "初级撞钟师",
-    channel: "school",
-    content:
-      "复习到凌晨三点突然顿悟：知识没有进入我的脑子，但黑眼圈已经进入了我的人生履历。",
-    likes: 196,
-    comments: 18,
-    mood: "脆皮学习",
-    time: "10:08",
-  },
-  {
-    id: 3,
-    author: "下班倒计时",
-    role: "自由灵魂认证",
-    channel: "quote",
-    content:
-      "别急着说自己废物，很多事情还没轮到你失败。先喝口水，我们慢慢把今天糊弄过去。",
-    likes: 415,
-    comments: 57,
-    mood: "丧系鸡血",
-    time: "11:26",
-  },
-  {
-    id: 4,
-    author: "表情包仓管",
-    role: "带薪发疯大师",
-    channel: "meme",
-    content: "领导：这个需求很简单。我的内心：那你来。",
-    likes: 326,
-    comments: 44,
-    mood: "工位表演",
-    time: "12:03",
-    isMeme: true,
-  },
-  {
-    id: 5,
-    author: "赛博茶水间",
-    role: "工位幽灵",
-    channel: "joke",
-    content:
-      "今日笑话：同事说他热爱工作。我问热爱哪部分，他说热爱它结束的那一刻。",
-    likes: 289,
-    comments: 21,
-    mood: "今日笑话",
-    time: "13:17",
-  },
 ];
 
 const dailyQuotes = [
@@ -176,16 +97,6 @@ function getLevel(points: number) {
   return [...levels].reverse().find((level) => points >= level.min) ?? levels[0];
 }
 
-function getRandomProfile(email: string): UserProfile {
-  return {
-    email,
-    nickname: randomNames[Math.floor(Math.random() * randomNames.length)],
-    avatar: presetAvatars[Math.floor(Math.random() * presetAvatars.length)],
-    avatarType: "preset",
-    isGuest: false,
-  };
-}
-
 function getCountdown(targetTime: string, now: Date) {
   const [hours, minutes] = targetTime.split(":").map(Number);
   const target = new Date(now);
@@ -211,22 +122,51 @@ function getCountdown(targetTime: string, now: Date) {
   };
 }
 
+const guestUser: UserProfile = {
+  email: "",
+  nickname: "游客 404",
+  avatar: "☕",
+  avatarType: "preset",
+  isGuest: true,
+  points: 236,
+};
+
+function readStoredUser() {
+  try {
+    const raw = window.localStorage.getItem("cicada-freedom-user");
+    return raw ? ({ ...guestUser, ...JSON.parse(raw) } as UserProfile) : guestUser;
+  } catch {
+    return guestUser;
+  }
+}
+
+function storeUser(user: UserProfile) {
+  if (user.isGuest) {
+    window.localStorage.removeItem("cicada-freedom-user");
+    return;
+  }
+  window.localStorage.setItem("cicada-freedom-user", JSON.stringify(user));
+}
+
 function App() {
+  const isAdminSite = window.location.pathname.startsWith("/admin");
   const [activeChannel, setActiveChannel] = useState<Channel>("all");
-  const [posts, setPosts] = useState(initialPosts);
-  const [points, setPoints] = useState(236);
-  const [user, setUser] = useState<UserProfile>({
-    email: "",
-    nickname: "游客 404",
-    avatar: "☕",
-    avatarType: "preset",
-    isGuest: true,
-  });
+  const [posts, setPosts] = useState<Post[]>([]);
+  const [user, setUser] = useState<UserProfile>(readStoredUser);
+  const [authMode, setAuthMode] = useState<"register" | "code" | "password">("code");
   const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [code, setCode] = useState("7777");
+  const [authMessage, setAuthMessage] = useState("");
+  const [isAuthSubmitting, setIsAuthSubmitting] = useState(false);
   const [draftNickname, setDraftNickname] = useState("");
   const [draftAvatar, setDraftAvatar] = useState(presetAvatars[0]);
   const [draftAvatarType, setDraftAvatarType] = useState<"preset" | "upload">("preset");
   const [isEditingProfile, setIsEditingProfile] = useState(false);
+  const [adminStats, setAdminStats] = useState<AdminStats | null>(null);
+  const [adminPosts, setAdminPosts] = useState<Post[]>([]);
+  const [apiError, setApiError] = useState("");
+  const [isLoading, setIsLoading] = useState(true);
   const [targetTime, setTargetTime] = useState("18:00");
   const [now, setNow] = useState(() => new Date());
   const [composer, setComposer] = useState("");
@@ -238,10 +178,46 @@ function App() {
     return () => window.clearInterval(timer);
   }, []);
 
-  const level = getLevel(points);
-  const nextLevel = levels.find((item) => item.min > points);
+  useEffect(() => {
+    storeUser(user);
+  }, [user]);
+
+  useEffect(() => {
+    if (isAdminSite) {
+      void loadAdmin();
+    } else {
+      void loadPosts();
+    }
+  }, [isAdminSite]);
+
+  async function loadPosts() {
+    try {
+      setIsLoading(true);
+      const result = await fetchPosts();
+      setPosts(result.posts);
+      setApiError("");
+    } catch (error) {
+      setApiError(error instanceof Error ? error.message : "帖子加载失败");
+    } finally {
+      setIsLoading(false);
+    }
+  }
+
+  async function loadAdmin() {
+    try {
+      const result = await fetchAdminDashboard();
+      setAdminStats(result.stats);
+      setAdminPosts(result.posts);
+      setApiError("");
+    } catch (error) {
+      setApiError(error instanceof Error ? error.message : "后台数据加载失败");
+    }
+  }
+
+  const level = getLevel(user.points);
+  const nextLevel = levels.find((item) => item.min > user.points);
   const progress = nextLevel
-    ? Math.min(100, Math.round(((points - level.min) / (nextLevel.min - level.min)) * 100))
+    ? Math.min(100, Math.round(((user.points - level.min) / (nextLevel.min - level.min)) * 100))
     : 100;
 
   const filteredPosts = useMemo(() => {
@@ -254,28 +230,88 @@ function App() {
   const countdown = getCountdown(targetTime, now);
   const viewer = user.nickname;
 
-  function handleLogin(event: FormEvent<HTMLFormElement>) {
+  async function handleAuth(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const profile = getRandomProfile(email);
-    setUser(profile);
-    setDraftNickname(profile.nickname);
-    setDraftAvatar(profile.avatar);
-    setDraftAvatarType(profile.avatarType);
-    setIsEditingProfile(true);
-    setEmail("");
-    setPoints((current) => current + 18);
+    const payloadEmail = email.trim() || user.email;
+    if (!payloadEmail.includes("@")) {
+      setAuthMessage("先填一个有效邮箱。");
+      return;
+    }
+    if ((authMode === "register" || authMode === "password") && password.length < 6) {
+      setAuthMessage("密码至少 6 位。");
+      return;
+    }
+    if ((authMode === "register" || authMode === "code") && code.trim() !== "7777") {
+      setAuthMessage("当前万能验证码是 7777。");
+      return;
+    }
+
+    try {
+      setIsAuthSubmitting(true);
+      setAuthMessage("正在处理账号请求...");
+      const result =
+        authMode === "register"
+          ? await register({ email: payloadEmail, password, code })
+          : authMode === "password"
+            ? await loginWithPassword({ email: payloadEmail, password })
+            : await loginWithCode({ email: payloadEmail, code });
+      const profile = result.user;
+      setUser(profile);
+      setDraftNickname(profile.nickname);
+      setDraftAvatar(profile.avatar);
+      setDraftAvatarType(profile.avatarType);
+      setIsEditingProfile(true);
+      setEmail("");
+      setPassword("");
+      setCode("7777");
+      setApiError("");
+      setAuthMessage("已登录，今天的灵魂暂时归档成功。");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "账号操作失败";
+      setAuthMessage(message);
+      setApiError(message);
+    } finally {
+      setIsAuthSubmitting(false);
+    }
   }
 
-  function handleGuest() {
-    const guest: UserProfile = {
-      email: "",
-      nickname: `游客 ${Math.floor(Math.random() * 900 + 100)}`,
-      avatar: presetAvatars[Math.floor(Math.random() * presetAvatars.length)],
-      avatarType: "preset",
-      isGuest: true,
-    };
-    setUser(guest);
-    setPoints((current) => current + 3);
+  async function handleGuest() {
+    try {
+      const { user: guest } = await enterGuest();
+      setUser(guest);
+      setApiError("");
+    } catch (error) {
+      setApiError(error instanceof Error ? error.message : "游客模式启动失败");
+    }
+  }
+
+  async function handleLogout() {
+    try {
+      await logout();
+    } catch {
+      // Local logout should still complete if the API is unavailable.
+    }
+    setUser(guestUser);
+    setIsEditingProfile(false);
+    setDraftNickname("");
+    setDraftAvatar(presetAvatars[0]);
+    setDraftAvatarType("preset");
+    setApiError("");
+    setAuthMessage("已退出登录。");
+  }
+
+  async function handleDeleteAccount() {
+    if (!user.id || user.isGuest) return;
+    const confirmed = window.confirm("确定要注销账号吗？账号会被删除，历史发帖会显示为已注销用户。");
+    if (!confirmed) return;
+
+    try {
+      await deleteAccount(user.id);
+      await handleLogout();
+      await loadPosts();
+    } catch (error) {
+      setApiError(error instanceof Error ? error.message : "注销账号失败");
+    }
   }
 
   function startProfileEdit() {
@@ -285,15 +321,25 @@ function App() {
     setIsEditingProfile(true);
   }
 
-  function saveProfile() {
-    setUser((current) => ({
-      ...current,
-      nickname: draftNickname.trim() || current.nickname,
+  async function saveProfile() {
+    const payload = {
+      nickname: draftNickname.trim() || user.nickname,
       avatar: draftAvatar,
       avatarType: draftAvatarType,
-    }));
-    setIsEditingProfile(false);
-    setPoints((current) => current + 5);
+    };
+
+    try {
+      if (user.id && !user.isGuest) {
+        const result = await updateProfile(user.id, payload);
+        setUser(result.user);
+      } else {
+        setUser((current) => ({ ...current, ...payload, points: current.points + 5 }));
+      }
+      setIsEditingProfile(false);
+      setApiError("");
+    } catch (error) {
+      setApiError(error instanceof Error ? error.message : "资料保存失败");
+    }
   }
 
   function handleAvatarUpload(event: ChangeEvent<HTMLInputElement>) {
@@ -310,45 +356,66 @@ function App() {
     reader.readAsDataURL(file);
   }
 
-  function handlePost(event: FormEvent<HTMLFormElement>) {
+  async function handlePost(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const trimmed = composer.trim();
     if (!trimmed) return;
 
-    const newPost: Post = {
-      id: Date.now(),
-      author: viewer,
-      role: level.title,
-      channel: asMeme ? "meme" : selectedMood === "丧系鸡汤" ? "quote" : "work",
-      content: trimmed,
-      likes: 0,
-      comments: 0,
-      mood: selectedMood,
-      time: new Date().toLocaleTimeString("zh-CN", {
-        hour: "2-digit",
-        minute: "2-digit",
-      }),
-      isMeme: asMeme,
-    };
-
-    setPosts((current) => [newPost, ...current]);
-    setComposer("");
-    setAsMeme(false);
-    setPoints((current) => current + (asMeme ? 15 : 10));
+    try {
+      const result = await createPost({
+        author: viewer,
+        role: level.title,
+        channel: asMeme ? "meme" : selectedMood === "丧系鸡汤" ? "quote" : "work",
+        content: trimmed,
+        mood: selectedMood,
+        isMeme: asMeme,
+      });
+      setPosts((current) => [result.post, ...current]);
+      setComposer("");
+      setAsMeme(false);
+      setUser((current) => ({ ...current, points: current.points + (asMeme ? 15 : 10) }));
+      setApiError("");
+    } catch (error) {
+      setApiError(error instanceof Error ? error.message : "发布失败");
+    }
   }
 
-  function handleLike(postId: number) {
-    setPosts((current) =>
-      current.map((post) => (post.id === postId ? { ...post, likes: post.likes + 1 } : post)),
-    );
-    setPoints((current) => current + 1);
+  async function handleLike(postId: number) {
+    try {
+      const result = await likePost(postId);
+      setPosts((current) => current.map((post) => (post.id === postId ? result.post : post)));
+      setUser((current) => ({ ...current, points: current.points + 1 }));
+      setApiError("");
+    } catch (error) {
+      setApiError(error instanceof Error ? error.message : "点赞失败");
+    }
+  }
+
+  async function handlePostStatus(postId: number, status: Post["status"]) {
+    try {
+      await updatePostStatus(postId, status);
+      await Promise.all([loadPosts(), loadAdmin()]);
+    } catch (error) {
+      setApiError(error instanceof Error ? error.message : "状态更新失败");
+    }
+  }
+
+  async function handleDeletePost(postId: number) {
+    try {
+      await deletePost(postId);
+      await Promise.all([loadPosts(), loadAdmin()]);
+    } catch (error) {
+      setApiError(error instanceof Error ? error.message : "删除失败");
+    }
   }
 
   const LevelIcon = level.icon;
 
   return (
     <main className="app-shell">
-      <section className="hero-panel">
+      {!isAdminSite ? (
+        <>
+          <section className="hero-panel">
         <div className="hero-copy">
           <span className="eyebrow">
             <AlarmClock size={16} />
@@ -386,6 +453,8 @@ function App() {
         </div>
       </section>
 
+      {apiError && <div className="api-alert">{apiError}，确认后端服务已启动。</div>}
+
       <section className="workspace">
         <aside className="side-panel profile-panel">
           <div className="profile-top">
@@ -420,7 +489,7 @@ function App() {
 
           <div className="progress-block">
             <div className="progress-label">
-              <span>活跃值 {points}</span>
+              <span>活跃值 {user.points}</span>
               <span>{nextLevel ? `下一阶 ${nextLevel.min}` : "已满级"}</span>
             </div>
             <div className="progress-track">
@@ -428,22 +497,97 @@ function App() {
             </div>
           </div>
 
-          <form className="login-card" onSubmit={handleLogin}>
-            <label htmlFor="email">邮箱注册 / 登录</label>
-            <div className="email-row">
-              <input
-                id="email"
-                type="email"
-                value={email}
-                onChange={(event) => setEmail(event.target.value)}
-                placeholder="you@freedom.life"
-              />
-              <button aria-label="登录" type="submit">
-                <LogIn size={18} />
-              </button>
+          <section className="login-card">
+            <div className="card-title">
+              <KeyRound size={18} />
+              账号中心
             </div>
-            {!user.isGuest && <small>已登录后可编辑昵称和头像。</small>}
-          </form>
+
+            {user.isGuest ? (
+              <form onSubmit={handleAuth}>
+                <div className="auth-tabs" aria-label="账号操作">
+                  <button
+                    className={authMode === "register" ? "active" : ""}
+                    type="button"
+                    onClick={() => setAuthMode("register")}
+                  >
+                    注册
+                  </button>
+                  <button
+                    className={authMode === "code" ? "active" : ""}
+                    type="button"
+                    onClick={() => setAuthMode("code")}
+                  >
+                    验证码登录
+                  </button>
+                  <button
+                    className={authMode === "password" ? "active" : ""}
+                    type="button"
+                    onClick={() => setAuthMode("password")}
+                  >
+                    密码登录
+                  </button>
+                </div>
+
+                <label htmlFor="email">邮箱</label>
+                <input
+                  id="email"
+                  type="email"
+                  value={email}
+                  onChange={(event) => setEmail(event.target.value)}
+                  placeholder="you@freedom.life"
+                />
+
+                {(authMode === "register" || authMode === "password") && (
+                  <>
+                    <label htmlFor="password">密码</label>
+                    <input
+                      id="password"
+                      type="password"
+                      value={password}
+                      onChange={(event) => setPassword(event.target.value)}
+                      placeholder="至少 6 位"
+                    />
+                  </>
+                )}
+
+                {(authMode === "register" || authMode === "code") && (
+                  <>
+                    <label htmlFor="code">验证码</label>
+                    <input
+                      id="code"
+                      inputMode="numeric"
+                      value={code}
+                      onChange={(event) => setCode(event.target.value)}
+                      placeholder="7777"
+                    />
+                  </>
+                )}
+
+                <button className="auth-submit" type="submit" disabled={isAuthSubmitting}>
+                  {authMode === "register" ? <MailCheck size={17} /> : <LogIn size={17} />}
+                  {isAuthSubmitting ? "处理中" : authMode === "register" ? "注册并登录" : "登录"}
+                </button>
+                {authMessage && <div className="auth-message">{authMessage}</div>}
+              </form>
+            ) : (
+              <div className="auth-session">
+                <small>当前账号</small>
+                <strong>{user.email}</strong>
+                {authMessage && <div className="auth-message">{authMessage}</div>}
+                <div className="account-actions">
+                  <button type="button" onClick={() => void handleLogout()}>
+                    <LogOut size={16} />
+                    退出登录
+                  </button>
+                  <button className="danger-action" type="button" onClick={() => void handleDeleteAccount()}>
+                    <UserX size={16} />
+                    注销账号
+                  </button>
+                </div>
+              </div>
+            )}
+          </section>
 
           <section className="profile-editor">
             <button className="editor-toggle" type="button" onClick={startProfileEdit}>
@@ -568,6 +712,8 @@ function App() {
           </form>
 
           <div className="post-list">
+            {isLoading && <div className="empty-state">正在从后端捞帖子，稍等一下。</div>}
+            {!isLoading && filteredPosts.length === 0 && <div className="empty-state">这个频道暂时安静得像假期前的需求池。</div>}
             {filteredPosts.map((post) => (
               <article className={`post-card ${post.isMeme ? "meme-post" : ""}`} key={post.id}>
                 <header>
@@ -608,7 +754,7 @@ function App() {
               每日很丧很鸡血
             </div>
             <p>{todayQuote}</p>
-            <button onClick={() => setPoints((current) => current + 2)}>
+            <button onClick={() => setUser((current) => ({ ...current, points: current.points + 2 }))}>
               <Heart size={16} />
               续命 +2
             </button>
@@ -649,6 +795,112 @@ function App() {
           </div>
         </aside>
       </section>
+        </>
+      ) : (
+        <section className="admin-panel">
+          <div className="admin-topbar">
+            <strong>下班前别死 Admin</strong>
+            <a href="/">返回用户端</a>
+          </div>
+          {apiError && <div className="api-alert">{apiError}，确认后端服务已启动。</div>}
+          <div className="admin-head">
+            <div>
+              <span className="eyebrow">
+                <ShieldCheck size={16} />
+                内容后台
+              </span>
+              <h2>把广场管住，但别把灵魂管没。</h2>
+            </div>
+            <button className="primary-action" onClick={() => void loadAdmin()}>
+              <RefreshCw size={16} />
+              刷新后台
+            </button>
+          </div>
+
+          <div className="metric-grid">
+            <div className="metric-card">
+              <Users size={18} />
+              <span>注册用户</span>
+              <strong>{adminStats?.users ?? 0}</strong>
+            </div>
+            <div className="metric-card">
+              <MessageCircle size={18} />
+              <span>全部帖子</span>
+              <strong>{adminStats?.posts ?? 0}</strong>
+            </div>
+            <div className="metric-card">
+              <Eye size={18} />
+              <span>展示中</span>
+              <strong>{adminStats?.published ?? 0}</strong>
+            </div>
+            <div className="metric-card">
+              <ThumbsUp size={18} />
+              <span>累计续命</span>
+              <strong>{adminStats?.totalLikes ?? 0}</strong>
+            </div>
+          </div>
+
+          <div className="admin-layout">
+            <section className="admin-table">
+              <header>
+                <div>
+                  <h3>帖子审核</h3>
+                  <p>隐藏不会删除内容，删除会从本地 JSON 数据中移除。</p>
+                </div>
+              </header>
+              {adminPosts.map((post) => (
+                <article className="admin-row" key={post.id}>
+                  <div>
+                    <strong>{post.author}</strong>
+                    <span>{post.channel} · {post.mood} · {post.time}</span>
+                    <p>{post.content}</p>
+                  </div>
+                  <span className={`status-pill ${post.status}`}>{post.status === "published" ? "展示中" : "已隐藏"}</span>
+                  <div className="admin-actions">
+                    <button onClick={() => void handlePostStatus(post.id, post.status === "published" ? "hidden" : "published")}>
+                      {post.status === "published" ? <EyeOff size={16} /> : <Eye size={16} />}
+                      {post.status === "published" ? "隐藏" : "恢复"}
+                    </button>
+                    <button className="danger-action" onClick={() => void handleDeletePost(post.id)}>
+                      <Trash2 size={16} />
+                      删除
+                    </button>
+                  </div>
+                </article>
+              ))}
+            </section>
+
+            <aside className="admin-side">
+              <div className="daily-card">
+                <div className="card-title">
+                  <Image size={18} />
+                  频道分布
+                </div>
+                <div className="channel-bars">
+                  {(adminStats?.channels ?? []).map((item) => (
+                    <div key={item.channel}>
+                      <span>{channels.find((channel) => channel.id === item.channel)?.label ?? item.channel}</span>
+                      <strong>{item.count}</strong>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="daily-card">
+                <div className="card-title">
+                  <EyeOff size={18} />
+                  风控概览
+                </div>
+                <ul>
+                  <li>隐藏内容：{adminStats?.hidden ?? 0}</li>
+                  <li>表情包文案：{adminStats?.memePosts ?? 0}</li>
+                  <li>最新发布：{adminStats?.newestPostAt ? new Date(adminStats.newestPostAt).toLocaleString("zh-CN") : "暂无"}</li>
+                </ul>
+              </div>
+            </aside>
+          </div>
+        </section>
+      )}
     </main>
   );
 }
