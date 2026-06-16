@@ -2,8 +2,10 @@ import { AdminStats, Post, UserProfile } from "./types";
 
 const apiBase = import.meta.env.VITE_API_BASE ?? "/api";
 const localAuthKey = "cicada-freedom-local-auth-users";
+const adminTokenKey = "cicada-freedom-admin-token";
 
 type LocalUserRecord = UserProfile & { password: string };
+export type AdminSession = { token: string; email: string };
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   let response: Response;
@@ -32,6 +34,24 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     throw new Error(payload.message || "接口请求失败");
   }
   return payload;
+}
+
+function readAdminToken() {
+  if (typeof window === "undefined") return "";
+  return window.localStorage.getItem(adminTokenKey) || "";
+}
+
+function adminHeaders(): Record<string, string> {
+  const token = readAdminToken();
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
+export function hasAdminSession() {
+  return Boolean(readAdminToken());
+}
+
+export function clearAdminSession() {
+  window.localStorage.removeItem(adminTokenKey);
 }
 
 function handleLocalAuthFallback<T>(path: string, init?: RequestInit): T | null {
@@ -65,7 +85,7 @@ function handleLocalAuthFallback<T>(path: string, init?: RequestInit): T | null 
 
   if (path === "/auth/register") {
     if (!isValidEmail(email)) throw new Error("请输入有效邮箱");
-    if (code !== "7777") throw new Error("验证码不正确，当前万能验证码是 7777");
+    if (code !== "7777") throw new Error("验证码不正确");
     if (password.length < 6) throw new Error("密码至少 6 位");
 
     const users = readLocalUsers();
@@ -88,7 +108,7 @@ function handleLocalAuthFallback<T>(path: string, init?: RequestInit): T | null 
 
   if (path === "/auth/login/code") {
     if (!isValidEmail(email)) throw new Error("请输入有效邮箱");
-    if (code !== "7777") throw new Error("验证码不正确，当前万能验证码是 7777");
+    if (code !== "7777") throw new Error("验证码不正确");
     const users = readLocalUsers();
     const user = users.find((item) => item.email === email);
     if (!user) throw new Error("账号不存在，请先注册");
@@ -215,59 +235,32 @@ export function deleteAccount(userId: number) {
   return request<{ ok: boolean }>(`/users/${userId}`, { method: "DELETE" });
 }
 
+export async function loginAdmin(payload: { email: string; password: string }) {
+  const session = await request<AdminSession>("/admin/login", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+  window.localStorage.setItem(adminTokenKey, session.token);
+  return session;
+}
+
 export function fetchAdminDashboard() {
-  return request<{ stats: AdminStats; posts: Post[]; users: UserProfile[] }>("/admin/dashboard")
-    .then(mergeLocalUsersIntoDashboard)
-    .catch((error) => {
-      const localUsers = readLocalUsers().map(compactLocalUser);
-      if (localUsers.length === 0) throw error;
-      return mergeLocalUsersIntoDashboard({
-        stats: createEmptyAdminStats(),
-        posts: [],
-        users: [],
-      });
-    });
-}
-
-function mergeLocalUsersIntoDashboard(dashboard: { stats: AdminStats; posts: Post[]; users: UserProfile[] }) {
-  const localUsers = readLocalUsers().map(compactLocalUser);
-  if (localUsers.length === 0) return dashboard;
-
-  const knownEmails = new Set(dashboard.users.map((user) => user.email));
-  const mergedUsers = [...dashboard.users, ...localUsers.filter((user) => !knownEmails.has(user.email))];
-  return {
-    ...dashboard,
-    stats: {
-      ...dashboard.stats,
-      users: mergedUsers.length,
-    },
-    users: mergedUsers,
-  };
-}
-
-function createEmptyAdminStats(): AdminStats {
-  return {
-    users: 0,
-    posts: 0,
-    published: 0,
-    hidden: 0,
-    totalLikes: 0,
-    memePosts: 0,
-    newestPostAt: null,
-    channels: ["work", "school", "meme", "quote", "joke"].map((channel) => ({
-      channel: channel as Post["channel"],
-      count: 0,
-    })),
-  };
+  return request<{ stats: AdminStats; posts: Post[]; users: UserProfile[] }>("/admin/dashboard", {
+    headers: adminHeaders(),
+  });
 }
 
 export function updatePostStatus(postId: number, status: Post["status"]) {
   return request<{ post: Post }>(`/admin/posts/${postId}`, {
     method: "PATCH",
+    headers: adminHeaders(),
     body: JSON.stringify({ status }),
   });
 }
 
 export function deletePost(postId: number) {
-  return request<{ post: Post }>(`/admin/posts/${postId}`, { method: "DELETE" });
+  return request<{ post: Post }>(`/admin/posts/${postId}`, {
+    method: "DELETE",
+    headers: adminHeaders(),
+  });
 }

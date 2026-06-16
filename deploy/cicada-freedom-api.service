@@ -1,0 +1,16 @@
+[Unit]
+Description=Cicada Freedom API
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/var/www/cicada-freedom
+EnvironmentFile=/etc/cicada-freedom.env
+ExecStart=/usr/bin/npm run start
+Restart=always
+RestartSec=5
+User=www-data
+Group=www-data
+
+[Install]
+WantedBy=multi-user.target

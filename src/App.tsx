@@ -36,6 +36,7 @@ import {
 } from "lucide-react";
 import { ChangeEvent, FormEvent, useEffect, useMemo, useState } from "react";
 import {
+  clearAdminSession,
   createPost,
   deleteAccount,
   deletePost,
@@ -43,10 +44,12 @@ import {
   fetchAdminDashboard,
   fetchPosts,
   likePost,
+  loginAdmin,
   loginWithCode,
   loginWithPassword,
   logout,
   register,
+  hasAdminSession,
   updatePostStatus,
   updateProfile,
 } from "./api";
@@ -156,7 +159,7 @@ function App() {
   const [authMode, setAuthMode] = useState<"register" | "code" | "password">("code");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [code, setCode] = useState("7777");
+  const [code, setCode] = useState("");
   const [authMessage, setAuthMessage] = useState("");
   const [isAuthSubmitting, setIsAuthSubmitting] = useState(false);
   const [draftNickname, setDraftNickname] = useState("");
@@ -167,6 +170,9 @@ function App() {
   const [adminPosts, setAdminPosts] = useState<Post[]>([]);
   const [adminUsers, setAdminUsers] = useState<UserProfile[]>([]);
   const [adminView, setAdminView] = useState<"posts" | "users">("posts");
+  const [isAdminAuthed, setIsAdminAuthed] = useState(() => hasAdminSession());
+  const [adminEmail, setAdminEmail] = useState("");
+  const [adminPassword, setAdminPassword] = useState("");
   const [apiError, setApiError] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [targetTime, setTargetTime] = useState("18:00");
@@ -186,11 +192,12 @@ function App() {
 
   useEffect(() => {
     if (isAdminSite) {
-      void loadAdmin();
+      if (isAdminAuthed) void loadAdmin();
+      setIsLoading(false);
     } else {
       void loadPosts();
     }
-  }, [isAdminSite]);
+  }, [isAdminAuthed, isAdminSite]);
 
   async function loadPosts() {
     try {
@@ -207,6 +214,7 @@ function App() {
 
   async function loadAdmin() {
     try {
+      setIsLoading(true);
       const result = await fetchAdminDashboard();
       setAdminStats(result.stats);
       setAdminPosts(result.posts);
@@ -214,6 +222,12 @@ function App() {
       setApiError("");
     } catch (error) {
       setApiError(error instanceof Error ? error.message : "后台数据加载失败");
+      if (error instanceof Error && error.message.includes("登录")) {
+        clearAdminSession();
+        setIsAdminAuthed(false);
+      }
+    } finally {
+      setIsLoading(false);
     }
   }
 
@@ -244,8 +258,8 @@ function App() {
       setAuthMessage("密码至少 6 位。");
       return;
     }
-    if ((authMode === "register" || authMode === "code") && code.trim() !== "7777") {
-      setAuthMessage("当前万能验证码是 7777。");
+    if ((authMode === "register" || authMode === "code") && !code.trim()) {
+      setAuthMessage("请输入验证码。");
       return;
     }
 
@@ -266,7 +280,7 @@ function App() {
       setIsEditingProfile(true);
       setEmail("");
       setPassword("");
-      setCode("7777");
+      setCode("");
       setApiError("");
       setAuthMessage("已登录，今天的灵魂暂时归档成功。");
     } catch (error) {
@@ -392,6 +406,31 @@ function App() {
     } catch (error) {
       setApiError(error instanceof Error ? error.message : "点赞失败");
     }
+  }
+
+  async function handleAdminLogin(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    try {
+      setIsAuthSubmitting(true);
+      await loginAdmin({ email: adminEmail, password: adminPassword });
+      setIsAdminAuthed(true);
+      setAdminPassword("");
+      setApiError("");
+      await loadAdmin();
+    } catch (error) {
+      setApiError(error instanceof Error ? error.message : "管理员登录失败");
+    } finally {
+      setIsAuthSubmitting(false);
+    }
+  }
+
+  function handleAdminLogout() {
+    clearAdminSession();
+    setIsAdminAuthed(false);
+    setAdminStats(null);
+    setAdminPosts([]);
+    setAdminUsers([]);
+    setApiError("");
   }
 
   async function handlePostStatus(postId: number, status: Post["status"]) {
@@ -562,7 +601,7 @@ function App() {
                       inputMode="numeric"
                       value={code}
                       onChange={(event) => setCode(event.target.value)}
-                      placeholder="7777"
+                      placeholder="输入验证码"
                     />
                   </>
                 )}
@@ -799,11 +838,52 @@ function App() {
         </aside>
       </section>
         </>
+      ) : !isAdminAuthed ? (
+        <section className="admin-panel admin-login-panel">
+          <div className="admin-topbar">
+            <strong>下班前别死 Admin</strong>
+            <a href="/">返回用户端</a>
+          </div>
+          <form className="auth-card admin-login-card" onSubmit={handleAdminLogin}>
+            <span className="eyebrow">
+              <ShieldCheck size={16} />
+              管理员入口
+            </span>
+            <h2>登录后管理帖子和用户。</h2>
+            <label htmlFor="admin-email">管理员邮箱</label>
+            <input
+              id="admin-email"
+              type="email"
+              value={adminEmail}
+              onChange={(event) => setAdminEmail(event.target.value)}
+              placeholder="admin@freedom.life"
+            />
+            <label htmlFor="admin-password">管理员密码</label>
+            <input
+              id="admin-password"
+              type="password"
+              value={adminPassword}
+              onChange={(event) => setAdminPassword(event.target.value)}
+              placeholder="至少 6 位"
+            />
+            <button className="auth-submit" type="submit" disabled={isAuthSubmitting}>
+              <KeyRound size={17} />
+              {isAuthSubmitting ? "登录中" : "进入后台"}
+            </button>
+            {apiError && <div className="auth-message">{apiError}</div>}
+          </form>
+        </section>
       ) : (
         <section className="admin-panel">
           <div className="admin-topbar">
             <strong>下班前别死 Admin</strong>
-            <a href="/">返回用户端</a>
+            <div className="admin-topbar-actions">
+              <button type="button" onClick={handleAdminLogout}>
+                <LogOut size={16} />
+                退出后台
+              </button>
+              <a href="/">返回用户端</a>
+            </div>
           </div>
           {apiError && <div className="api-alert">{apiError}，确认后端服务已启动。</div>}
           <div className="admin-head">

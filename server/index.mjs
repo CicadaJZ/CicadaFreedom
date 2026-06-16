@@ -1,5 +1,5 @@
 import { createServer } from "node:http";
-import { createHash } from "node:crypto";
+import { createHash, createHmac, pbkdf2Sync, randomBytes, timingSafeEqual } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -9,6 +9,15 @@ const dataDir = join(__dirname, "data");
 const dbPath = join(dataDir, "db.json");
 const port = Number(process.env.PORT || 8787);
 const host = process.env.HOST || "127.0.0.1";
+const allowedOrigins = (process.env.ALLOWED_ORIGINS || "")
+  .split(",")
+  .map((origin) => origin.trim())
+  .filter(Boolean);
+const verificationCode = process.env.VERIFICATION_CODE || "7777";
+const adminEmail = (process.env.ADMIN_EMAIL || "admin@freedom.life").trim().toLowerCase();
+const adminPassword = process.env.ADMIN_PASSWORD || "admin1234";
+const tokenSecret = process.env.JWT_SECRET || "dev-only-change-before-deploy";
+const adminTokenTtlMs = Number(process.env.ADMIN_TOKEN_TTL_MS || 24 * 60 * 60 * 1000);
 
 const presetAvatars = ["☕", "💼", "🫠", "🧃", "🌙", "🔥", "🦾", "✨"];
 const randomNames = [
@@ -125,7 +134,7 @@ function normalizeDb(db) {
   db.users = Array.isArray(db.users) ? db.users : [];
   db.posts = Array.isArray(db.posts) ? db.posts : [];
   db.users = db.users.map((user) => {
-    if (user.email === "demo@freedom.life" && !user.passwordHash) {
+    if (user.email === "demo@freedom.life" && (!user.passwordHash || !user.passwordHash.includes("$"))) {
       return { ...user, passwordHash: hashPassword("demo1234") };
     }
     return user;
@@ -138,12 +147,20 @@ async function writeDb(db) {
   await writeFile(dbPath, JSON.stringify(db, null, 2));
 }
 
+function applyCors(req, res) {
+  const origin = req.headers.origin;
+  const allowOrigin = allowedOrigins.length === 0 || !origin || allowedOrigins.includes(origin) ? origin || "*" : "";
+  if (allowOrigin) {
+    res.setHeader("Access-Control-Allow-Origin", allowOrigin);
+  }
+  res.setHeader("Vary", "Origin");
+  res.setHeader("Access-Control-Allow-Methods", "GET,POST,PUT,PATCH,DELETE,OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
+}
+
 function sendJson(res, status, payload) {
   res.writeHead(status, {
     "Content-Type": "application/json; charset=utf-8",
-    "Access-Control-Allow-Origin": "*",
-    "Access-Control-Allow-Methods": "GET,POST,PUT,PATCH,DELETE,OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type",
   });
   res.end(JSON.stringify(payload));
 }
@@ -186,7 +203,22 @@ function compactUser(user) {
 }
 
 function hashPassword(password) {
-  return createHash("sha256").update(String(password)).digest("hex");
+  const salt = randomBytes(16).toString("hex");
+  const hash = pbkdf2Sync(String(password), salt, 120_000, 32, "sha256").toString("hex");
+  return `pbkdf2$${salt}$${hash}`;
+}
+
+function verifyPassword(password, passwordHash) {
+  if (!passwordHash) return false;
+  if (!passwordHash.includes("$")) {
+    return createHash("sha256").update(String(password)).digest("hex") === passwordHash;
+  }
+  const [algorithm, salt, expectedHash] = passwordHash.split("$");
+  if (algorithm !== "pbkdf2" || !salt || !expectedHash) return false;
+  const hash = pbkdf2Sync(String(password), salt, 120_000, 32, "sha256").toString("hex");
+  const expected = Buffer.from(expectedHash, "hex");
+  const actual = Buffer.from(hash, "hex");
+  return expected.length === actual.length && timingSafeEqual(expected, actual);
 }
 
 function isValidEmail(email) {
@@ -202,7 +234,7 @@ function readAuthPayload(payload) {
 }
 
 function validateCode(code) {
-  return code === "7777";
+  return code === verificationCode;
 }
 
 function getRandomProfile(email = "") {
@@ -231,8 +263,45 @@ function stats(db) {
   };
 }
 
+function base64Url(input) {
+  return Buffer.from(input).toString("base64url");
+}
+
+function signTokenPayload(encodedPayload) {
+  return createHmac("sha256", tokenSecret).update(encodedPayload).digest("base64url");
+}
+
+function createAdminToken(email) {
+  const payload = base64Url(JSON.stringify({ email, role: "admin", expiresAt: Date.now() + adminTokenTtlMs }));
+  return `${payload}.${signTokenPayload(payload)}`;
+}
+
+function verifyAdminToken(token) {
+  const [payload, signature] = String(token || "").split(".");
+  if (!payload || !signature || signTokenPayload(payload) !== signature) return false;
+  try {
+    const parsed = JSON.parse(Buffer.from(payload, "base64url").toString("utf8"));
+    return parsed.role === "admin" && parsed.email === adminEmail && Number(parsed.expiresAt) > Date.now();
+  } catch {
+    return false;
+  }
+}
+
+function readBearerToken(req) {
+  const header = req.headers.authorization || "";
+  const [scheme, token] = header.split(" ");
+  return scheme?.toLowerCase() === "bearer" ? token : "";
+}
+
+function requireAdmin(req, res) {
+  if (verifyAdminToken(readBearerToken(req))) return true;
+  sendJson(res, 401, { message: "请先登录管理员账号" });
+  return false;
+}
+
 const server = createServer(async (req, res) => {
   try {
+    applyCors(req, res);
     if (req.method === "OPTIONS") return sendJson(res, 204, {});
 
     const url = new URL(req.url ?? "/", `http://${req.headers.host}`);
@@ -310,7 +379,7 @@ const server = createServer(async (req, res) => {
       const payload = await readBody(req);
       const { email, password, code } = readAuthPayload(payload);
       if (!isValidEmail(email)) return sendJson(res, 400, { message: "请输入有效邮箱" });
-      if (!validateCode(code)) return sendJson(res, 400, { message: "验证码不正确，当前万能验证码是 7777" });
+      if (!validateCode(code)) return sendJson(res, 400, { message: "验证码不正确" });
       if (password.length < 6) return sendJson(res, 400, { message: "密码至少 6 位" });
       if (db.users.some((item) => item.email === email)) return sendJson(res, 409, { message: "这个邮箱已经注册过了" });
 
@@ -333,7 +402,7 @@ const server = createServer(async (req, res) => {
       const user = db.users.find((item) => item.email === email);
       if (!user) return sendJson(res, 404, { message: "账号不存在，请先注册" });
       if (!user.passwordHash) return sendJson(res, 400, { message: "这个账号还没有设置密码，请用验证码登录后补注册" });
-      if (user.passwordHash !== hashPassword(password)) return sendJson(res, 401, { message: "密码不正确" });
+      if (!verifyPassword(password, user.passwordHash)) return sendJson(res, 401, { message: "密码不正确" });
 
       user.points += 8;
       await writeDb(db);
@@ -344,7 +413,7 @@ const server = createServer(async (req, res) => {
       const payload = await readBody(req);
       const { email, code } = readAuthPayload(payload);
       if (!isValidEmail(email)) return sendJson(res, 400, { message: "请输入有效邮箱" });
-      if (!validateCode(code)) return sendJson(res, 400, { message: "验证码不正确，当前万能验证码是 7777" });
+      if (!validateCode(code)) return sendJson(res, 400, { message: "验证码不正确" });
 
       const user = db.users.find((item) => item.email === email);
       if (!user) return sendJson(res, 404, { message: "账号不存在，请先注册" });
@@ -400,12 +469,24 @@ const server = createServer(async (req, res) => {
       return sendJson(res, 200, { ok: true });
     }
 
+    if (req.method === "POST" && url.pathname === "/api/admin/login") {
+      const payload = await readBody(req);
+      const email = String(payload.email || "").trim().toLowerCase();
+      const password = String(payload.password || "");
+      if (email !== adminEmail || password !== adminPassword) {
+        return sendJson(res, 401, { message: "管理员账号或密码不正确" });
+      }
+      return sendJson(res, 200, { token: createAdminToken(email), email });
+    }
+
     if (req.method === "GET" && url.pathname === "/api/admin/dashboard") {
+      if (!requireAdmin(req, res)) return;
       return sendJson(res, 200, { stats: stats(db), posts: db.posts, users: db.users.map(compactUser) });
     }
 
     const adminPostMatch = url.pathname.match(/^\/api\/admin\/posts\/(\d+)$/);
     if (adminPostMatch) {
+      if (!requireAdmin(req, res)) return;
       const postIndex = db.posts.findIndex((post) => post.id === Number(adminPostMatch[1]));
       if (postIndex === -1) return sendJson(res, 404, { message: "帖子不存在" });
 
