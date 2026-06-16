@@ -157,6 +157,7 @@ function App() {
   const [posts, setPosts] = useState<Post[]>([]);
   const [user, setUser] = useState<UserProfile>(readStoredUser);
   const [authMode, setAuthMode] = useState<"register" | "code" | "password">("code");
+  const [authFieldNonce] = useState(() => Math.random().toString(36).slice(2));
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [code, setCode] = useState("");
@@ -246,6 +247,15 @@ function App() {
   const todayJoke = jokes[new Date().getDay() % jokes.length];
   const countdown = getCountdown(targetTime, now);
   const viewer = user.nickname;
+  const codeInputId = `auth-code-${authMode}`;
+  const codeInputName = `verification-${authMode}-${authFieldNonce}`;
+
+  function handleAuthModeChange(nextMode: "register" | "code" | "password") {
+    setAuthMode(nextMode);
+    setAuthMessage("");
+    setCode("");
+    if (nextMode !== "register") setPassword("");
+  }
 
   async function handleAuth(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -546,26 +556,26 @@ function App() {
             </div>
 
             {user.isGuest ? (
-              <form onSubmit={handleAuth}>
+              <form onSubmit={handleAuth} autoComplete="off">
                 <div className="auth-tabs" aria-label="账号操作">
                   <button
                     className={authMode === "register" ? "active" : ""}
                     type="button"
-                    onClick={() => setAuthMode("register")}
+                    onClick={() => handleAuthModeChange("register")}
                   >
                     注册
                   </button>
                   <button
                     className={authMode === "code" ? "active" : ""}
                     type="button"
-                    onClick={() => setAuthMode("code")}
+                    onClick={() => handleAuthModeChange("code")}
                   >
                     验证码登录
                   </button>
                   <button
                     className={authMode === "password" ? "active" : ""}
                     type="button"
-                    onClick={() => setAuthMode("password")}
+                    onClick={() => handleAuthModeChange("password")}
                   >
                     密码登录
                   </button>
@@ -574,10 +584,12 @@ function App() {
                 <label htmlFor="email">邮箱</label>
                 <input
                   id="email"
+                  name="email"
                   type="email"
                   value={email}
                   onChange={(event) => setEmail(event.target.value)}
                   placeholder="you@freedom.life"
+                  autoComplete="email"
                 />
 
                 {(authMode === "register" || authMode === "password") && (
@@ -585,23 +597,27 @@ function App() {
                     <label htmlFor="password">密码</label>
                     <input
                       id="password"
+                      name={authMode === "register" ? "new-password" : "current-password"}
                       type="password"
                       value={password}
                       onChange={(event) => setPassword(event.target.value)}
                       placeholder="至少 6 位"
+                      autoComplete={authMode === "register" ? "new-password" : "current-password"}
                     />
                   </>
                 )}
 
                 {(authMode === "register" || authMode === "code") && (
                   <>
-                    <label htmlFor="code">验证码</label>
+                    <label htmlFor={codeInputId}>验证码</label>
                     <input
-                      id="code"
+                      id={codeInputId}
+                      name={codeInputName}
                       inputMode="numeric"
                       value={code}
                       onChange={(event) => setCode(event.target.value)}
                       placeholder="输入验证码"
+                      autoComplete="new-password"
                     />
                   </>
                 )}
