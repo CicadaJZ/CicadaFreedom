@@ -1,4 +1,4 @@
-import { AdminStats, Post, UserProfile } from "./types";
+import { AdminStats, DailyLifeRecord, Post, PostComment, Tag, UploadAsset, UserProfile } from "./types";
 
 const apiBase = import.meta.env.VITE_API_BASE ?? "/api";
 const localAuthKey = "cicada-freedom-local-auth-users";
@@ -6,6 +6,19 @@ const adminTokenKey = "cicada-freedom-admin-token";
 
 type LocalUserRecord = UserProfile & { password: string };
 export type AdminSession = { token: string; email: string };
+export type PostQuery = {
+  status?: string;
+  sort?: "newest" | "hot" | "balanced";
+  tag?: string;
+  q?: string;
+  postId?: string;
+};
+export type CommentPayload = {
+  userId?: string;
+  author: string;
+  avatar: string;
+  content: string;
+};
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   let response: Response;
@@ -72,7 +85,7 @@ function handleLocalAuthFallback<T>(path: string, init?: RequestInit): T | null 
         avatar: "☕",
         avatarType: "preset",
         isGuest: true,
-        points: 239,
+        points: 0,
       },
     } as T;
   }
@@ -101,7 +114,6 @@ function handleLocalAuthFallback<T>(path: string, init?: RequestInit): T | null 
     const user = users.find((item) => item.email === email);
     if (!user) throw new Error("账号不存在，请先注册");
     if (user.password !== password) throw new Error("密码不正确");
-    user.points += 8;
     writeLocalUsers(users);
     return { user: compactLocalUser(user) } as T;
   }
@@ -112,7 +124,6 @@ function handleLocalAuthFallback<T>(path: string, init?: RequestInit): T | null 
     const users = readLocalUsers();
     const user = users.find((item) => item.email === email);
     if (!user) throw new Error("账号不存在，请先注册");
-    user.points += 8;
     writeLocalUsers(users);
     return { user: compactLocalUser(user) } as T;
   }
@@ -153,7 +164,7 @@ function createLocalUser(email: string, password: string): LocalUserRecord {
     avatar: avatars[Math.floor(Math.random() * avatars.length)],
     avatarType: "preset",
     isGuest: false,
-    points: 236,
+    points: 0,
   };
 }
 
@@ -173,19 +184,58 @@ function isValidEmail(email: string) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 }
 
-export function fetchPosts(status = "published") {
-  return request<{ posts: Post[] }>(`/posts?status=${status}`);
+function queryString(query: Record<string, string | undefined>) {
+  const params = new URLSearchParams();
+  Object.entries(query).forEach(([key, value]) => {
+    if (value) params.set(key, value);
+  });
+  const value = params.toString();
+  return value ? `?${value}` : "";
 }
 
-export function createPost(payload: Pick<Post, "author" | "role" | "channel" | "content" | "mood"> & { isMeme: boolean }) {
+export function fetchPosts(query: PostQuery = { status: "published" }) {
+  return request<{ posts: Post[]; tags: Tag[] }>(`/posts${queryString({ status: query.status ?? "published", sort: query.sort, tag: query.tag, q: query.q, postId: query.postId })}`);
+}
+
+export function fetchTags() {
+  return request<{ tags: Tag[] }>("/tags");
+}
+
+export function createPost(
+  payload: Pick<Post, "author" | "role" | "channel" | "content"> & { tags: string[]; isMeme: boolean; imageUrl?: string },
+) {
   return request<{ post: Post }>("/posts", {
     method: "POST",
     body: JSON.stringify(payload),
   });
 }
 
-export function likePost(postId: number) {
-  return request<{ post: Post }>(`/posts/${postId}/like`, { method: "POST" });
+export function likePost(postId: number, payload: { userId?: string; clientId?: string }) {
+  return request<{ post: Post }>(`/posts/${postId}/like`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function commentPost(postId: number, payload: CommentPayload) {
+  return request<{ post: Post; comment: PostComment }>(`/posts/${postId}/comments`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function replyToComment(postId: number, commentId: number, payload: CommentPayload) {
+  return request<{ post: Post; reply: PostComment }>(`/posts/${postId}/comments/${commentId}/replies`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function uploadMemeImage(dataUrl: string) {
+  return request<{ upload: UploadAsset }>("/uploads/memes", {
+    method: "POST",
+    body: JSON.stringify({ dataUrl }),
+  });
 }
 
 export function legacyLogin(email: string) {
@@ -235,6 +285,13 @@ export function deleteAccount(userId: number) {
   return request<{ ok: boolean }>(`/users/${userId}`, { method: "DELETE" });
 }
 
+export function dailyLife(userId: number, payload: { clientId?: string; nickname: string }) {
+  return request<{ ok: boolean; record: DailyLifeRecord; user: UserProfile | null }>(`/users/${userId}/daily-life`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
 export async function loginAdmin(payload: { email: string; password: string }) {
   const session = await request<AdminSession>("/admin/login", {
     method: "POST",
@@ -244,8 +301,15 @@ export async function loginAdmin(payload: { email: string; password: string }) {
   return session;
 }
 
-export function fetchAdminDashboard() {
-  return request<{ stats: AdminStats; posts: Post[]; users: UserProfile[] }>("/admin/dashboard", {
+export function fetchAdminDashboard(query: PostQuery = {}) {
+  return request<{
+    stats: AdminStats;
+    posts: Post[];
+    users: UserProfile[];
+    tags: Tag[];
+    uploads: UploadAsset[];
+    dailyLifeRecords: DailyLifeRecord[];
+  }>(`/admin/dashboard${queryString({ status: "all", sort: query.sort, tag: query.tag, q: query.q, postId: query.postId })}`, {
     headers: adminHeaders(),
   });
 }
@@ -262,5 +326,21 @@ export function deletePost(postId: number) {
   return request<{ post: Post }>(`/admin/posts/${postId}`, {
     method: "DELETE",
     headers: adminHeaders(),
+  });
+}
+
+export function addAdminTag(label: string) {
+  return request<{ tag: Tag }>("/admin/tags", {
+    method: "POST",
+    headers: adminHeaders(),
+    body: JSON.stringify({ label }),
+  });
+}
+
+export function addUserPoints(userId: number, amount: number) {
+  return request<{ user: UserProfile }>(`/admin/users/${userId}/points`, {
+    method: "POST",
+    headers: adminHeaders(),
+    body: JSON.stringify({ amount }),
   });
 }

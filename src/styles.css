@@ -170,6 +170,7 @@ button:hover {
 
 .screen-card {
   position: relative;
+  overflow: hidden;
   width: min(440px, 100%);
   aspect-ratio: 1.2;
   padding: 24px;
@@ -177,6 +178,59 @@ button:hover {
   background: #181c21;
   color: #fffdf6;
   box-shadow: 12px 12px 0 rgba(0, 0, 0, 0.35);
+}
+
+.merit-rain {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.merit-drop {
+  position: absolute;
+  top: -42px;
+  border: 1px solid #fffdf6;
+  border-radius: 999px;
+  padding: 4px 8px;
+  background: #9ee6b6;
+  color: #1d232a;
+  font-size: 12px;
+  font-weight: 950;
+  animation: merit-fall 3.8s linear infinite;
+  white-space: nowrap;
+}
+
+.merit-drop.tone-1 {
+  background: #ffcd91;
+}
+
+.merit-drop.tone-2 {
+  background: #bfd7ff;
+}
+
+.merit-drop.tone-3 {
+  background: #ffc6dd;
+}
+
+.merit-drop.tone-4 {
+  background: #ffe07a;
+}
+
+@keyframes merit-fall {
+  0% {
+    transform: translateY(-30px) rotate(-6deg);
+    opacity: 0;
+  }
+
+  12% {
+    opacity: 1;
+  }
+
+  100% {
+    transform: translateY(380px) rotate(10deg);
+    opacity: 0.12;
+  }
 }
 
 .screen-bar {
@@ -215,6 +269,7 @@ button:hover {
 .screen-sticker,
 .screen-badge {
   position: absolute;
+  z-index: 1;
   border: 1px solid #fffdf6;
   padding: 12px;
   font-weight: 900;
@@ -721,6 +776,57 @@ button:hover {
   color: #fffdf6;
 }
 
+.feed-tools {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  align-items: center;
+  margin-top: 14px;
+}
+
+.feed-tools select,
+.admin-filters input,
+.admin-filters select,
+.admin-inline-form input,
+.points-editor input,
+.comment-box input,
+.reply-box input {
+  min-width: 0;
+  min-height: 38px;
+  border: 1px solid var(--ink);
+  border-radius: 6px;
+  padding: 0 10px;
+  background: #fffdf6;
+}
+
+.segmented-control {
+  display: inline-grid;
+  grid-template-columns: repeat(3, minmax(62px, 1fr));
+  border: 1px solid var(--ink);
+  border-radius: 6px;
+  overflow: hidden;
+  background: #fffdf6;
+}
+
+.segmented-control button {
+  min-height: 38px;
+  border: 0;
+  border-right: 1px solid var(--line);
+  background: transparent;
+  box-shadow: none;
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.segmented-control button:last-child {
+  border-right: 0;
+}
+
+.segmented-control button.active {
+  background: #1d232a;
+  color: #fffdf6;
+}
+
 .composer {
   margin-top: 14px;
   border: 1px solid var(--ink);
@@ -760,6 +866,61 @@ button:hover {
   margin-top: 10px;
 }
 
+.tag-picker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.tag-picker button {
+  min-height: 34px;
+  padding: 0 10px;
+  background: #fffdf6;
+  box-shadow: none;
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.tag-picker button.selected {
+  background: #1d232a;
+  color: #fffdf6;
+}
+
+.meme-upload-control {
+  width: auto;
+  min-height: 36px;
+  margin-top: 0;
+  padding: 0 12px;
+  box-shadow: none;
+}
+
+.meme-upload-preview {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  margin-top: 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 8px;
+  background: #fffdf6;
+}
+
+.meme-upload-preview img {
+  width: 72px;
+  height: 72px;
+  border: 1px solid var(--ink);
+  border-radius: 6px;
+  object-fit: cover;
+}
+
+.meme-upload-preview button {
+  min-height: 34px;
+  padding: 0 10px;
+  box-shadow: none;
+  background: #ffd4cf;
+}
+
 .toggle {
   display: inline-flex;
   align-items: center;
@@ -780,6 +941,11 @@ button:hover {
   border-radius: 6px;
   padding: 16px;
   background: #fffdf6;
+}
+
+.post-card.liked-post {
+  background: #fff9dc;
+  box-shadow: inset 0 0 0 3px #ffe07a;
 }
 
 .post-card header {
@@ -820,6 +986,24 @@ button:hover {
   font-weight: 800;
 }
 
+.post-card footer button.liked {
+  background: #ffe07a;
+  box-shadow: inset 0 0 0 2px #1d232a;
+}
+
+.comment-count {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 34px;
+  border: 1px solid var(--ink);
+  border-radius: 6px;
+  padding: 0 10px;
+  background: #edf0f3;
+  font-size: 13px;
+  font-weight: 800;
+}
+
 .mood-tag {
   background: #edf0f3;
 }
@@ -855,6 +1039,105 @@ button:hover {
   line-height: 1.35;
 }
 
+.meme-frame img {
+  width: min(360px, 100%);
+  max-height: 320px;
+  border: 1px solid var(--ink);
+  border-radius: 6px;
+  object-fit: contain;
+  background: #fffdf6;
+}
+
+.comment-panel {
+  display: grid;
+  gap: 10px;
+  margin-top: 14px;
+  border-top: 1px solid var(--line);
+  padding-top: 12px;
+}
+
+.comment-list {
+  display: grid;
+  gap: 10px;
+}
+
+.comment-item {
+  display: grid;
+  gap: 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 10px;
+  background: #f7f3ea;
+}
+
+.comment-item .comment-list {
+  margin-left: 28px;
+}
+
+.comment-main {
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr);
+  gap: 8px;
+}
+
+.comment-avatar {
+  display: grid;
+  width: 32px;
+  height: 32px;
+  place-items: center;
+  border: 1px solid var(--ink);
+  border-radius: 6px;
+  background: #fffdf6;
+  overflow: hidden;
+}
+
+.comment-main strong,
+.comment-main small {
+  display: block;
+}
+
+.comment-main small {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.comment-main p {
+  margin: 4px 0 0;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.comment-box,
+.reply-box,
+.points-editor {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+}
+
+.comment-box button,
+.reply-box button,
+.points-editor button,
+.admin-filters button,
+.admin-inline-form button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 38px;
+  border: 1px solid var(--ink);
+  border-radius: 6px;
+  padding: 0 12px;
+  background: #9ee6b6;
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.reply-box {
+  grid-template-columns: minmax(0, 1fr) 76px;
+}
+
 .daily-card,
 .badge-wall {
   border: 1px solid var(--ink);
@@ -884,6 +1167,17 @@ button:hover {
   padding: 0 12px;
   background: #ffcd91;
   box-shadow: none;
+  font-weight: 900;
+}
+
+.daily-message {
+  margin-top: 10px;
+  border: 1px solid #fffdf6;
+  border-radius: 6px;
+  padding: 8px 10px;
+  background: rgba(255, 253, 246, 0.16);
+  color: #fffdf6;
+  font-size: 12px;
   font-weight: 900;
 }
 
@@ -1046,6 +1340,35 @@ button:hover {
   align-items: start;
 }
 
+.admin-filters {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 140px 180px auto;
+  gap: 10px;
+  margin-top: 18px;
+  border: 1px solid var(--ink);
+  border-radius: 6px;
+  padding: 12px;
+  background: #fffdf6;
+  box-shadow: 4px 4px 0 var(--ink);
+}
+
+.search-field {
+  position: relative;
+  min-width: 0;
+}
+
+.search-field svg {
+  position: absolute;
+  top: 50%;
+  left: 10px;
+  transform: translateY(-50%);
+}
+
+.search-field input {
+  width: 100%;
+  padding-left: 34px;
+}
+
 .admin-table {
   padding: 16px;
 }
@@ -1105,7 +1428,7 @@ button:hover {
 }
 
 .user-row {
-  grid-template-columns: minmax(0, 1fr) 84px 120px;
+  grid-template-columns: minmax(0, 1fr) 84px 220px;
 }
 
 .user-identity {
@@ -1123,13 +1446,20 @@ button:hover {
   border: 1px solid var(--ink);
   border-radius: 6px;
   background: #edf0f3;
+  overflow: hidden;
   font-size: 22px;
+}
+
+.user-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 
 .user-meta {
   display: grid;
   justify-items: end;
-  gap: 2px;
+  gap: 6px;
 }
 
 .user-meta span {
@@ -1140,6 +1470,19 @@ button:hover {
 
 .user-meta strong {
   font-size: 24px;
+}
+
+.points-editor {
+  width: 100%;
+}
+
+.points-editor input {
+  min-height: 34px;
+}
+
+.points-editor button {
+  min-height: 34px;
+  padding: 0 9px;
 }
 
 .status-pill {
@@ -1210,6 +1553,48 @@ button:hover {
   font-weight: 900;
 }
 
+.admin-inline-form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.admin-tag-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.upload-list {
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.upload-list a {
+  display: grid;
+  grid-template-columns: 46px minmax(0, 1fr);
+  gap: 8px;
+  align-items: center;
+  color: var(--ink);
+  text-decoration: none;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.upload-list img {
+  width: 46px;
+  height: 46px;
+  border: 1px solid var(--ink);
+  border-radius: 6px;
+  object-fit: cover;
+}
+
+.compact-list {
+  font-size: 13px;
+}
+
 @media (max-width: 1180px) {
   .workspace {
     grid-template-columns: 260px minmax(0, 1fr);
@@ -1223,6 +1608,10 @@ button:hover {
 
   .admin-layout {
     grid-template-columns: 1fr;
+  }
+
+  .admin-filters {
+    grid-template-columns: 1fr 1fr;
   }
 }
 
@@ -1278,14 +1667,19 @@ button:hover {
 
   .hero-actions,
   .composer-head,
-  .composer-actions {
+  .composer-actions,
+  .feed-tools,
+  .admin-filters {
     align-items: stretch;
     flex-direction: column;
+    display: flex;
   }
 
   .primary-action,
   .ghost-action,
-  .composer button {
+  .composer button,
+  .feed-tools select,
+  .meme-upload-control {
     width: 100%;
   }
 

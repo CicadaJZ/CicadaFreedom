@@ -330,7 +330,19 @@ Login to `/admin` using the values stored in `/etc/cicada-freedom.env`.
 
 ## 13. Updating the site later
 
-Run on the server:
+After pushing `main`, redeploy from the local computer with one SSH command:
+
+```bash
+ssh ubuntu@43.129.158.226 'cd /var/www/cicada-freedom && sudo chown -R ubuntu:ubuntu /var/www/cicada-freedom && git pull && pnpm install && pnpm build && sudo chown -R www-data:www-data /var/www/cicada-freedom && sudo systemctl restart cicada-freedom-api && sudo systemctl reload nginx && curl -sS https://cicadafreedom.com/api/health'
+```
+
+Expected final output:
+
+```json
+{"ok":true,"service":"cicada-freedom-api"}
+```
+
+Or run the same steps manually on the server:
 
 ```bash
 cd /var/www/cicada-freedom
@@ -348,6 +360,8 @@ Check:
 ```bash
 curl https://cicadafreedom.com/api/health
 ```
+
+After frontend changes, hard refresh `https://cicadafreedom.com/` in the browser to avoid using a cached asset. If auth code login or registration still says `验证码不正确`, check the production value in `/etc/cicada-freedom.env`; `VERIFICATION_CODE` overrides the app's local default.
 
 ## 14. Useful maintenance commands
 
